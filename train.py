@@ -17,14 +17,23 @@ import unet
 from torch.utils.data import DataLoader
 from torch.autograd import Variable
 from tensorboardX import SummaryWriter
-from tqdm import tqdm
 from PIL import  Image
 from torchvision import transforms as T
 from focal_loss import FocalLoss
 
 from focalloss2d import FocalLoss2d
+from mIoULoss import *
 
+def soft_dice_loss(segmented, gt, size_average=True, eps=1e-9):
+    I = (segmented * gt.float()).sum(dim=1).sum(dim=1)
+    S = segmented.sum(dim=1).sum(dim=1).float() + gt.sum(dim=1).sum(dim=1).float()
+    loss = -(2 * I + eps) / (S + eps)
 
+    if size_average:
+        loss = loss.mean()
+    else:
+        loss = loss.sum()
+    return loss
 
 
 def train_net(net,
@@ -37,7 +46,7 @@ def train_net(net,
 
     root_data = os.path.join(os.path.dirname(os.path.realpath(__file__)),
       'data')
-    dir_checkpoint = 'checkpoints/dentist'
+    dir_checkpoint = 'checkpoints/dentist/'
 
     train_set = ElaticSet(root_data, train=True)
     test_set = ElaticSet(root_data, test=True)
@@ -53,15 +62,15 @@ def train_net(net,
     N_train = train_set.getLen()
     N_test = test_set.getLen()
 
-    optimizer = torch.optim.Adam(
-        net.parameters(),
-        lr=lr,
-        weight_decay=1e-3)
+    # optimizer = torch.optim.Adam(
+    #     net.parameters(),
+    #     lr=lr,
+    #     weight_decay=1e-3)
 
-    # optimizer = optim.SGD(net.parameters(),
-    #                       lr=lr,
-    #                       momentum=0.9,
-    #                       weight_decay=0.0005)
+    optimizer = optim.SGD(net.parameters(),
+                          lr=lr,
+                          momentum=0.9,
+                          weight_decay=0.0005)
 
     # to use focal loss
     # criterion = FocalLoss(class_num=2,gamma=1)
@@ -73,9 +82,10 @@ def train_net(net,
     # criterion = torch.nn.CrossEntropyLoss(weight=weight)
 
     # to use BCE loss
-    criterion = nn.BCELoss()
+    criterion1 = soft_dice_loss
+    criterion2 = mIoULoss()
 
-    writer = SummaryWriter('log/BCElossADAM')
+    writer = SummaryWriter('log/soft_dice_lossSGD')
     processed_batch = 0
 
     print('''
@@ -96,31 +106,32 @@ def train_net(net,
         num_i = 0
 
         # Sets the learning rate to the initial LR decayed by 10 every 10 epochs when epoch < 70
-        if (epoch + 1) % 10 == 0 and epoch < 70:
+        if (epoch + 1) % 20 == 0 and epoch < 100:
             for param_group in optimizer.param_groups:
                 param_group['lr'] = param_group['lr'] * 0.1
+                print('learn rate is ' + str(param_group['lr'] * 0.1))
 
         for ii, (imgs, true_masks) in enumerate(train_data):
             num_i += 1
             processed_batch += 1
 
             imgs = Variable(imgs)
-            true_masks = Variable(true_masks)
+            true_masks_dice = Variable(true_masks)
+            true_masks_miou = Variable(to_one_hot(true_masks.long(), 2))
             if gpu:
-                # input = input.long()
-                
-                # true_masks = true_masks.long()
                 imgs = imgs.cuda()
-                true_masks = true_masks.cuda()
+                true_masks_dice = true_masks_dice.cuda()
+                true_masks_miou = true_masks_miou.cuda()
 
             # to use BCE loss
             optimizer.zero_grad()
             masks_pred = net(imgs)
             masks_pred = F.sigmoid(masks_pred)
-            masks_probs_flat = masks_pred.view(-1)
-            true_masks_flat = true_masks.view(-1)
-            loss = criterion(masks_probs_flat, true_masks_flat)
-
+            # masks_probs_flat = masks_pred.view(-1)
+            # true_masks_flat = true_masks.view(-1)
+            loss1 = criterion1(masks_pred, true_masks_dice)
+            loss2 = criterion2(masks_pred, true_masks_miou)
+            loss = loss1.div(2) + loss2.div(2)
 
             # to use classification loss
             # masks_pred = masks_pred.contiguous().view(masks_pred.size(0), masks_pred.size(1), -1)
@@ -147,7 +158,7 @@ def train_net(net,
         writer.add_scalar('val_dice', val_dice, epoch + 1)
 
 
-        if save_cp and val_dice > 0.95:
+        if save_cp and val_dice > 0.85:
             torch.save(net.state_dict(),
                        dir_checkpoint + 'CP{}.pth'.format(epoch + 1))
             print('Checkpoint {} saved !'.format(epoch + 1))
@@ -159,7 +170,7 @@ def get_args():
                       help='number of epochs')
     parser.add_option('-b', '--batch-size', dest='batchsize', default=32,
                       type='int', help='batch size')
-    parser.add_option('-l', '--learning-rate', dest='lr', default=0.1,
+    parser.add_option('-l', '--learning-rate', dest='lr', default=0.01,
                       type='float', help='learning rate')
     parser.add_option('-g', '--gpu', action='store_true', dest='gpu',
                       default=True, help='use cuda')

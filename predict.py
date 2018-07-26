@@ -5,11 +5,12 @@ from torch.autograd import Variable
 import numpy as np
 import torch
 import torch.nn.functional as F
+from torchvision import transforms as T
 
 from PIL import Image
 
 from unet import UNet
-from utils import  normalize, hwc_to_chw, split_img_into_squares, merge_masks
+from utils import hwc_to_chw, split_img_into_squares, merge_masks
 from utils import dense_crf
 # from utils import plot_img_and_mask
 
@@ -25,18 +26,24 @@ def predict_img(net,
     img_height = full_img.shape[0]
     img_width = full_img.shape[1]
 
-    img = normalize(full_img)
+    left_square, right_square = split_img_into_squares(img.copy() / 255)
 
-    left_square, right_square = split_img_into_squares(img)
+    # left_square = hwc_to_chw(left_square)
+    # right_square = hwc_to_chw(right_square)
+    #
+    # X_left = torch.from_numpy(left_square).unsqueeze(0)
+    # X_right = torch.from_numpy(right_square).unsqueeze(0)
+    normalize = T.Normalize(mean=[0.4, 0.4, 0.4], std=[0.4, 0.4, 0.4])
+    transforms4imgs = T.Compose([
+        T.ToTensor(),
+        # normalize
+    ])
+    X_left = transforms4imgs(left_square)
+    X_right = transforms4imgs(right_square)
 
-    left_square = hwc_to_chw(left_square)
-    right_square = hwc_to_chw(right_square)
 
-    X_left = torch.from_numpy(left_square).unsqueeze(0)
-    X_right = torch.from_numpy(right_square).unsqueeze(0)
-
-    X_left = Variable(X_left)
-    X_right = Variable(X_right)
+    X_left = Variable(X_left).unsqueeze(0)
+    X_right = Variable(X_right).unsqueeze(0)
 
     if use_gpu:
         X_left = X_left.cuda()
@@ -75,7 +82,7 @@ def predict_img(net,
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', '-m', default='checkpoints/CP22_hand_new.pth',
+    parser.add_argument('--model', '-m', default='checkpoints/best.pth',
                         metavar='FILE',
                         help="Specify the file in which is stored the model"
                              " (default : 'MODEL.pth')")
@@ -158,6 +165,7 @@ if __name__ == "__main__":
         print("\nPredicting image {} ...".format(fn))
 
         img = cv2.imread(fn)
+        # img = img[:,:, np.newaxis]
         img = img.astype(np.float32)
 
 
@@ -173,7 +181,7 @@ if __name__ == "__main__":
 
         if not args.no_save:
             out_fn = out_files[i]
-            result = (mask * 255).astype(np.uint8)
+            result = mask.astype(np.uint8) * 255
             img = img.astype(np.uint8)
             img = cv2.bitwise_and(img, img, mask=result)
             cv2.imwrite(out_files[i], img)

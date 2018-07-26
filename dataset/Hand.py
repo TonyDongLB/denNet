@@ -76,6 +76,7 @@ class Hand(data.Dataset):
                 label = label[height - width:]
 
         _, label = cv2.threshold(label, 100, 255, cv2.THRESH_BINARY)
+        label = label / 255
         label = label[:, :, np.newaxis]
 
         data = self.transforms4imgs(data)

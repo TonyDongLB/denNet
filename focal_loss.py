@@ -96,58 +96,56 @@ class FocalLoss(nn.Module):
 
 
 if __name__ == "__main__":
-    alpha = torch.rand(21, 1)
-    print(alpha)
     FL = FocalLoss(class_num=2, gamma=0)
-    # CE = nn.CrossEntropyLoss()
-    # N = 4
-    # C = 2
-    # inputs = torch.rand(N, C)
-    # targets = torch.LongTensor(N).random_(C)
-    # inputs_fl = Variable(inputs.clone(), requires_grad=True)
-    # targets_fl = Variable(targets.clone())
-    #
-    # inputs_ce = Variable(inputs.clone(), requires_grad=True)
-    # targets_ce = Variable(targets.clone())
-    # print('----inputs----')
-    # print(inputs)
-    # print('---target-----')
-    # print(targets)
-    #
-    # fl_loss = FL(inputs_fl, targets_fl)
-    # ce_loss = CE(inputs_ce, targets_ce)
-    # print('ce = {}, fl ={}'.format(ce_loss.data[0], fl_loss.data[0]))
-    # fl_loss.backward()
-    # ce_loss.backward()
-    # # print(inputs_fl.grad.data)
-    # print(inputs_ce.grad.data)
-
-    N = 5
-    C = 4
-    inputs = torch.rand(3, 2, N, C)
-    targets = torch.LongTensor(3, 1, N, C, ).random_(2)
+    CE = nn.CrossEntropyLoss()
+    N = 4
+    C = 2
+    inputs = torch.rand(N, C)
+    targets = torch.LongTensor(N).random_(C)
     inputs_fl = Variable(inputs.clone(), requires_grad=True)
     targets_fl = Variable(targets.clone())
 
     inputs_ce = Variable(inputs.clone(), requires_grad=True)
     targets_ce = Variable(targets.clone())
     print('----inputs----')
-    print(inputs_fl)
+    print(inputs)
     print('---target-----')
-    print(targets_fl)
-    # print('----trans----')
-    # trans = inputs_fl.transpose(0, 2)
-    # trans = trans.contiguous().view(-1, trans.size(2)).squeeze().shape
-    # print(trans)
+    print(targets)
 
     fl_loss = FL(inputs_fl, targets_fl)
-    # ce_loss = CE(inputs_ce, targets_ce)
-    # print('ce = {}'.format(ce_loss.data[0]))
-    print('fl ={}'.format(fl_loss.data[0]))
+    ce_loss = CE(inputs_ce, targets_ce)
+    print('ce = {}, fl ={}'.format(ce_loss.data[0], fl_loss.data[0]))
     fl_loss.backward()
-    # ce_loss.backward()
-    print(inputs_fl.grad.data)
-    # print(inputs_ce.grad.data)
+    ce_loss.backward()
+    # print(inputs_fl.grad.data)
+    print(inputs_ce.grad.data)
+
+    # N = 5
+    # C = 4
+    # inputs = torch.rand(3, 2, N, C)
+    # targets = torch.LongTensor(3, 1, N, C, ).random_(2)
+    # inputs_fl = Variable(inputs.clone(), requires_grad=True)
+    # targets_fl = Variable(targets.clone())
+    #
+    # inputs_ce = Variable(inputs.clone(), requires_grad=True)
+    # targets_ce = Variable(targets.clone())
+    # print('----inputs----')
+    # print(inputs_fl)
+    # print('---target-----')
+    # print(targets_fl)
+    # # print('----trans----')
+    # # trans = inputs_fl.transpose(0, 2)
+    # # trans = trans.contiguous().view(-1, trans.size(2)).squeeze().shape
+    # # print(trans)
+    #
+    # fl_loss = FL(inputs_fl, targets_fl)
+    # # ce_loss = CE(inputs_ce, targets_ce)
+    # # print('ce = {}'.format(ce_loss.data[0]))
+    # print('fl ={}'.format(fl_loss.data[0]))
+    # fl_loss.backward()
+    # # ce_loss.backward()
+    # print(inputs_fl.grad.data)
+    # # print(inputs_ce.grad.data)
 
 
 

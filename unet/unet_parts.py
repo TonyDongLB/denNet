@@ -48,7 +48,7 @@ class down(nn.Module):
 
 
 class up(nn.Module):
-    def __init__(self, in_ch, out_ch, bilinear=True):
+    def __init__(self, in_ch, out_ch, bilinear=False):
         super(up, self).__init__()
 
         #  would be a nice idea if the upsampling could be learned too,
@@ -70,6 +70,24 @@ class up(nn.Module):
         x = self.conv(x)
         return x
 
+class re_up(nn.Module):
+    def __init__(self, in_ch, out_ch):
+        super(re_up, self).__init__()
+
+        self.up = nn.ConvTranspose2d(in_ch, in_ch // 4 * 3, kernel_size=2, stride=2)
+        self.reduce = nn.Conv2d(in_ch // 2, in_ch // 4, 1)
+        self.conv = double_conv(in_ch, out_ch)
+
+    def forward(self, x1, x2):
+        x1 = self.up(x1)
+        x2 = self.reduce(x2)
+        diffX = x1.size()[2] - x2.size()[2]
+        diffY = x1.size()[3] - x2.size()[3]
+        x2 = F.pad(x2, (diffX // 2, int(diffX / 2),
+                        diffY // 2, int(diffY / 2)))
+        x = torch.cat([x2, x1], dim=1)
+        x = self.conv(x)
+        return x
 
 class outconv(nn.Module):
     def __init__(self, in_ch, out_ch):

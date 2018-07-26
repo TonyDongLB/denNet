@@ -5,18 +5,27 @@ import torch.nn as nn
 
 
 class UNet(nn.Module):
-    def __init__(self, n_channels, n_classes):
+    def __init__(self, n_channels, n_classes, reduce=False):
+        ''' the reduce means reduce the second feature map in up function, because
+            we think classification is more important '''
         super(UNet, self).__init__()
         self.inc = inconv(n_channels, 64)
         self.down1 = down(64, 128)
         self.down2 = down(128, 256)
         self.down3 = down(256, 512)
         self.down4 = down(512, 1024)
-        self.up1 = up(1024, 512, bilinear=False)
-        self.up2 = up(512, 256, bilinear=False)
-        self.up3 = up(256, 128, bilinear=False)
-        self.up4 = up(128, 64, bilinear=False)
-        self.outc = outconv(64, n_classes)
+        if reduce:
+            self.up1 = re_up(1024, 512)
+            self.up2 = re_up(512, 256)
+            self.up3 = re_up(256, 128)
+            self.up4 = re_up(128, 64)
+            self.outc = outconv(64, n_classes)
+        else:
+            self.up1 = up(1024, 512)
+            self.up2 = up(512, 256)
+            self.up3 = up(256, 128)
+            self.up4 = up(128, 64)
+            self.outc = outconv(64, n_classes)
 
     def forward(self, x):
         x1 = self.inc(x)
