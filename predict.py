@@ -78,8 +78,8 @@ def predict_img(net,
 
     full_mask = merge_masks(left_mask_np, right_mask_np, img_width)
 
-    if use_dense_crf:
-        full_mask = dense_crf(np.array(full_img).astype(np.uint8), full_mask)
+    # if use_dense_crf:
+    #     full_mask = dense_crf(np.array(full_img).astype(np.uint8), full_mask)
 
     return full_mask > out_threshold
 
@@ -87,7 +87,7 @@ def predict_img(net,
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', '-m', default='checkpoints/CP44_focal_hand_1.035.pth',
+    parser.add_argument('--model', '-m', default='checkpoints/CP32_focal_SE_1.024.pth',
                         metavar='FILE',
                         help="Specify the file in which is stored the model"
                              " (default : 'MODEL.pth')")
@@ -141,7 +141,7 @@ if __name__ == "__main__":
 
     out_channels = 2
 
-    net = UNet(n_channels=3, n_classes=out_channels)
+    net = UNet(n_channels=3, n_classes=out_channels, SE_mode=True)
 
     print("Loading model {}".format(args.model))
     # original saved file with DataParallel

@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torch import optim
 
 from eval import *
-from unet import UNet
+from unet import *
 
 from dataset import Hand
 import unet
@@ -198,7 +198,7 @@ def train_net(net,
 
         if save_cp and val_score > 0.90:
             torch.save(net.state_dict(),
-                       dir_checkpoint + 'CP{}_focal_SE_{:.4}.pth'.format(epoch + 1, val_score))
+                       dir_checkpoint + 'CP{}_deeper_SE_{:.4}.pth'.format(epoch + 1, val_score))
             print('Checkpoint {} saved !'.format(epoch + 1))
 
 
@@ -223,7 +223,7 @@ if __name__ == '__main__':
     args = get_args()
     print('torch.__version__ {}'.format(torch.__version__))
 
-    net = UNet(n_channels=3, n_classes=2, SE_mode=True)
+    net = DeeperUNet(n_channels=3, n_classes=2, SE_mode=True)
 
     if args.load:
         net.load_state_dict(torch.load(args.load))
