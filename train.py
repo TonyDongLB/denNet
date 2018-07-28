@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import optim
 
-from eval import eval_net
+from eval import *
 from unet import UNet
 
 from dataset import ElaticSet
@@ -72,8 +72,8 @@ def train_net(net,
                           momentum=0.9,
                           weight_decay=0.0005)
 
-    # to use focal loss
-    # criterion = FocalLoss(class_num=2,gamma=1)
+    # # to use focal loss
+    criterion = FocalLoss(class_num=2,gamma=1)
 
     # to use CEloss with weight
     # weight = torch.Tensor([1, 99])
@@ -82,10 +82,10 @@ def train_net(net,
     # criterion = torch.nn.CrossEntropyLoss(weight=weight)
 
     # to use BCE loss
-    criterion1 = soft_dice_loss
-    criterion2 = mIoULoss()
+    # criterion1 = soft_dice_loss
+    # criterion2 = mIoULoss()
 
-    writer = SummaryWriter('log/soft_dice_lossSGD')
+    writer = SummaryWriter('log/focal_den')
     processed_batch = 0
 
     print('''
@@ -116,22 +116,17 @@ def train_net(net,
             processed_batch += 1
 
             imgs = Variable(imgs)
-            true_masks_dice = Variable(true_masks)
-            true_masks_miou = Variable(to_one_hot(true_masks.long(), 2))
+            true_masks = Variable(true_masks)
             if gpu:
                 imgs = imgs.cuda()
-                true_masks_dice = true_masks_dice.cuda()
-                true_masks_miou = true_masks_miou.cuda()
+                true_masks = true_masks.cuda()
 
             # to use BCE loss
             optimizer.zero_grad()
             masks_pred = net(imgs)
-            masks_pred = F.sigmoid(masks_pred)
             # masks_probs_flat = masks_pred.view(-1)
             # true_masks_flat = true_masks.view(-1)
-            loss1 = criterion1(masks_pred, true_masks_dice)
-            loss2 = criterion2(masks_pred, true_masks_miou)
-            loss = loss1.div(2) + loss2.div(2)
+            loss = criterion(masks_pred, true_masks)
 
             # to use classification loss
             # masks_pred = masks_pred.contiguous().view(masks_pred.size(0), masks_pred.size(1), -1)
@@ -153,12 +148,18 @@ def train_net(net,
         print('Epoch finished ! Loss: {}'.format(epoch_loss / num_i))
         writer.add_scalar('train_loss_epoch', epoch_loss / num_i, epoch + 1)
 
-        val_dice = eval_net(net, test_data, gpu)
-        print('Validation Dice Coeff: {}'.format(val_dice))
-        writer.add_scalar('val_dice', val_dice, epoch + 1)
+        # # use dice coff
+        # val_score = eval_net(net, test_data, gpu, focal=use_focal, CE=use_CE, dice=use_dice)
+        # print('Validation Dice Coeff: {}'.format(val_score))
+        # writer.add_scalar('val_dice', val_score, epoch + 1)
+
+        # # use Jaccard(iou) index
+        val_score = calcul_iou_for_focal(net, test_data, gpu)
+        print('Validation jaccard_similarity_score is : {}'.format(val_score))
+        writer.add_scalar('val_iou', val_score, epoch + 1)
 
 
-        if save_cp and val_dice > 0.85:
+        if save_cp and val_score > 0.95:
             torch.save(net.state_dict(),
                        dir_checkpoint + 'CP{}.pth'.format(epoch + 1))
             print('Checkpoint {} saved !'.format(epoch + 1))
@@ -180,10 +181,9 @@ def get_args():
     return options
 
 if __name__ == '__main__':
-    import os;os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2,3,4,5,6,7"
     args = get_args()
 
-    net = UNet(n_channels=1, n_classes=1)
+    net = UNet(n_channels=1, n_classes=2)
 
     if args.load:
         net.load_state_dict(torch.load(args.load))

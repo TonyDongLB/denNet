@@ -1,6 +1,8 @@
 import torch
 import torch.nn.functional as F
 from torch.autograd import Variable
+import numpy as np
+from sklearn.metrics import jaccard_similarity_score as jsc
 
 
 from dice_loss import dice_coeff
@@ -41,3 +43,21 @@ def eval_net(net, dataset, gpu=False, focal=False, CE=False,dice=False, channels
         # print(true_masks.size())
         tot += dice_coeff(mask_pred, true_masks)[0]
     return tot / i
+
+def calcul_iou_for_focal(net, dataset, gpu=False):
+    tot = 0
+    for i, (img, true_mask) in enumerate(dataset):
+        img = Variable(img)
+        if gpu:
+            img = img.cuda()
+
+        pred_mask = net(img).cpu()
+        pred_mask = pred_mask.data.numpy()
+        true_mask = true_mask.numpy()
+        pred_mask = np.argmax(pred_mask, axis=1)
+        pred_mask = pred_mask.reshape(-1)
+        true_mask = true_mask.reshape(-1)
+        tot += jsc(pred_mask, true_mask)
+
+    return tot / i
+

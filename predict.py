@@ -21,7 +21,8 @@ def predict_img(net,
                 full_img,
                 out_threshold=0.5,
                 use_dense_crf=True,
-                use_gpu=False):
+                use_gpu=False,
+                channels=2):
 
     img_height = full_img.shape[0]
     img_width = full_img.shape[1]
@@ -36,7 +37,7 @@ def predict_img(net,
     normalize = T.Normalize(mean=[0.4, 0.4, 0.4], std=[0.4, 0.4, 0.4])
     transforms4imgs = T.Compose([
         T.ToTensor(),
-        # normalize
+        normalize
     ])
     X_left = transforms4imgs(left_square)
     X_right = transforms4imgs(right_square)
@@ -54,8 +55,12 @@ def predict_img(net,
     output_left = net(X_left)
     output_right = net(X_right)
 
-    left_probs = F.sigmoid(output_left).squeeze(0)
-    right_probs = F.sigmoid(output_right).squeeze(0)
+    if channels > 1:
+        left_probs = torch.argmax(output_left, dim=1).float()
+        right_probs = torch.argmax(output_right, dim=1).float()
+    else:
+        left_probs = F.sigmoid(output_left).squeeze(0)
+        right_probs = F.sigmoid(output_right).squeeze(0)
 
     tf = transforms.Compose(
         [
@@ -82,7 +87,7 @@ def predict_img(net,
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', '-m', default='checkpoints/best.pth',
+    parser.add_argument('--model', '-m', default='checkpoints/CP44_focal_hand_1.035.pth',
                         metavar='FILE',
                         help="Specify the file in which is stored the model"
                              " (default : 'MODEL.pth')")
@@ -134,7 +139,9 @@ if __name__ == "__main__":
     in_files = glob.glob(filapath + "/*." + 'jpg')
     out_files = get_output_filenames(in_files)
 
-    net = UNet(n_channels=3, n_classes=1)
+    out_channels = 2
+
+    net = UNet(n_channels=3, n_classes=out_channels)
 
     print("Loading model {}".format(args.model))
     # original saved file with DataParallel
@@ -173,7 +180,8 @@ if __name__ == "__main__":
                            full_img=img,
                            out_threshold=args.mask_threshold,
                            use_dense_crf= not args.no_crf,
-                           use_gpu=not args.cpu)
+                           use_gpu=not args.cpu,
+                           channels=out_channels)
 
         # if args.viz:
         #     print("Visualizing results for image {}, close to continue ...".format(fn))

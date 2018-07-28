@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import optim
 
-from eval import eval_net
+from eval import *
 from unet import UNet
 
 from dataset import Hand
@@ -72,12 +72,13 @@ def train_net(net,
                           weight_decay=0.0005)
 
     # # setting loss fuc
-    use_focal = False
+    use_focal = True
     use_CE = False
     use_dice = False
+    use_iou = False
     if use_focal:
         # to use focal loss
-        criterion = FocalLoss(class_num=2, gamma=1)
+        criterion = FocalLoss(class_num=2, gamma=2)
     elif use_CE:
         # # to use CEloss with weight
         weight = torch.Tensor([2, 3])
@@ -86,10 +87,12 @@ def train_net(net,
         criterion = torch.nn.CrossEntropyLoss(weight=weight)
     elif use_dice:
         criterion = soft_dice_loss
-    else:
+    elif use_iou:
         # to use BCE loss
         criterion1 = nn.BCELoss()
         criterion2 = mIoULoss()
+    else:
+        criterion = nn.BCELoss()
 
     processed_batch = 0
 
@@ -112,7 +115,7 @@ def train_net(net,
         num_i = 0
 
         # Sets the learning rate to the initial LR decayed by 10 every 20 epochs when epoch < 70
-        if (epoch + 1) % 20 == 0 and epoch < 100:
+        if (epoch + 1) % 10 == 0 and epoch < 50:
             for param_group in optimizer.param_groups:
                 param_group['lr'] = param_group['lr'] * 0.1
                 print('NOTE!!! Learn rate is changed to ' + str(param_group['lr'] * 0.1))
@@ -122,39 +125,51 @@ def train_net(net,
             processed_batch += 1
 
             imgs = Variable(imgs)
-            true_masks_dice = Variable(true_masks)
-            true_masks_miou = Variable(to_one_hot(true_masks.long(), 2))
-
+            true_masks = Variable(true_masks)
+            if use_iou:
+                true_masks_miou = Variable(to_one_hot(true_masks.long(), 2))
             if use_focal or use_CE:
                 true_masks = true_masks.long()
             if gpu:
                 imgs = imgs.cuda()
-                true_masks_dice = true_masks_dice.cuda()
-                true_masks_miou = true_masks_miou.cuda()
-
+                true_masks = true_masks.cuda()
+                if use_iou:
+                    true_masks_miou = true_masks_miou.cuda()
 
             optimizer.zero_grad()
             masks_pred = net(imgs)
 
             if use_focal or use_CE:
                 # # to use classification loss
-                masks_pred = masks_pred.contiguous().view(masks_pred.size(0), masks_pred.size(1), -1)
-                masks_pred = masks_pred.transpose(1, 2)
-                masks_pred = masks_pred.contiguous().view(-1, masks_pred.size(2)).squeeze()
-                true_masks = true_masks.contiguous().view(true_masks.size(0), true_masks.size(1), -1)
-                true_masks = true_masks.transpose(1, 2)
-                true_masks = true_masks.contiguous().view(-1, true_masks.size(2)).squeeze()
+                if use_CE:
+                    masks_pred = masks_pred.contiguous().view(masks_pred.size(0), masks_pred.size(1), -1)
+                    masks_pred = masks_pred.transpose(1, 2)
+                    masks_pred = masks_pred.contiguous().view(-1, masks_pred.size(2)).squeeze()
+                    true_masks = true_masks.contiguous().view(true_masks.size(0), true_masks.size(1), -1)
+                    true_masks = true_masks.transpose(1, 2)
+                    true_masks = true_masks.contiguous().view(-1, true_masks.size(2)).squeeze()
                 loss = criterion(masks_pred, true_masks)
             elif use_dice:
                 loss = criterion(masks_pred, true_masks)
+            elif use_iou:
+                # # combine iou and dice loss
+                # channel0 = torch.ones(masks_pred.size())
+                # if masks_pred.is_cuda:
+                #     channel0.cuda()
+                channel0 = 1 - masks_pred
+                masks_pred_iou = torch.cat((channel0, masks_pred), dim=1)
+                masks_pred = F.sigmoid(masks_pred)
+                masks_probs_flat = masks_pred.view(-1)
+                true_masks_flat = true_masks.view(-1)
+                loss1 = criterion1(masks_probs_flat, true_masks_flat)
+                # # 需要把输入变为双通道
+                loss2 = criterion2(masks_pred_iou, true_masks_miou)
+                loss = loss1.div(2) + loss2.div(2)
             else:
                 masks_pred = F.sigmoid(masks_pred)
                 masks_probs_flat = masks_pred.view(-1)
-                true_masks_dice_flat = true_masks_dice.view(-1)
-                loss1 = criterion1(masks_probs_flat, true_masks_dice_flat)
-                # # 需要把输入变为双通道
-                loss2 = criterion2(masks_pred, true_masks_miou)
-                loss = loss1.div(2) + loss2.div(2)
+                loss = criterion(masks_probs_flat, masks_probs_flat)
+
 
             epoch_loss += loss.data[0]
 
@@ -166,15 +181,24 @@ def train_net(net,
         print('Epoch finished ! Loss: {}'.format(epoch_loss / num_i))
         writer.add_scalar('train_loss_epoch', epoch_loss / num_i, epoch + 1)
 
+        # # test the net
         net.eval()
-        val_dice = eval_net(net, test_data, gpu, focal=use_focal,CE=use_CE,dice=use_dice)
-        print('Validation Dice Coeff: {}'.format(val_dice))
-        writer.add_scalar('val_dice', val_dice, epoch + 1)
+
+        # # use dice coff
+        # val_score = eval_net(net, test_data, gpu, focal=use_focal, CE=use_CE, dice=use_dice)
+        # print('Validation Dice Coeff: {}'.format(val_score))
+        # writer.add_scalar('val_dice', val_score, epoch + 1)
+
+        # # use Jaccard(iou) index
+        val_score = calcul_iou_for_focal(net, test_data, gpu)
+        print('Validation jaccard_similarity_score is : {}'.format(val_score))
+        writer.add_scalar('val_iou', val_score, epoch + 1)
+
         net.train()
 
-        if save_cp and val_dice > 0.90:
+        if save_cp and val_score > 0.90:
             torch.save(net.state_dict(),
-                       dir_checkpoint + 'CP{}_hand_new.pth'.format(epoch + 1))
+                       dir_checkpoint + 'CP{}_focal_SE_{:.4}.pth'.format(epoch + 1, val_score))
             print('Checkpoint {} saved !'.format(epoch + 1))
 
 
@@ -182,7 +206,7 @@ def get_args():
     parser = OptionParser()
     parser.add_option('-e', '--epochs', dest='epochs', default=500, type='int',
                       help='number of epochs')
-    parser.add_option('-b', '--batch-size', dest='batchsize', default=16,
+    parser.add_option('-b', '--batch-size', dest='batchsize', default=32,
                       type='int', help='batch size')
     parser.add_option('-l', '--learning-rate', dest='lr', default=0.01,
                       type='float', help='learning rate')
@@ -195,12 +219,11 @@ def get_args():
 
 
 if __name__ == '__main__':
-    import os;
 
     args = get_args()
     print('torch.__version__ {}'.format(torch.__version__))
 
-    net = UNet(n_channels=3, n_classes=1)
+    net = UNet(n_channels=3, n_classes=2, SE_mode=True)
 
     if args.load:
         net.load_state_dict(torch.load(args.load))
