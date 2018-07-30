@@ -40,7 +40,7 @@ class UNet(nn.Module):
         x = self.outc(x)
         return x
 
-
+# # it seems that it perform not that good as a more deeper model
 class DeeperUNet(nn.Module):
     def __init__(self, n_channels, n_classes, reduce=False, SE_mode=False):
         super(DeeperUNet, self).__init__()

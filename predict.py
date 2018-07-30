@@ -9,7 +9,7 @@ from torchvision import transforms as T
 
 from PIL import Image
 
-from unet import UNet
+from unet import *
 from utils import hwc_to_chw, split_img_into_squares, merge_masks
 from utils import dense_crf
 # from utils import plot_img_and_mask
@@ -87,7 +87,7 @@ def predict_img(net,
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--model', '-m', default='checkpoints/CP32_focal_SE_1.024.pth',
+    parser.add_argument('--model', '-m', default='checkpoints/CP43.pth',
                         metavar='FILE',
                         help="Specify the file in which is stored the model"
                              " (default : 'MODEL.pth')")
@@ -134,14 +134,14 @@ if __name__ == "__main__":
     import os;os.environ["CUDA_VISIBLE_DEVICES"] = "0"
     args = get_args()
     filapath = os.path.join(os.path.dirname(os.path.realpath(__file__)),
-      'data/hand/test')
+      'data/test')
 
-    in_files = glob.glob(filapath + "/*." + 'jpg')
+    in_files = glob.glob(filapath + "/*." + 'bmp')
     out_files = get_output_filenames(in_files)
 
     out_channels = 2
 
-    net = UNet(n_channels=3, n_classes=out_channels, SE_mode=True)
+    net = DeeperUNet(n_channels=3, n_classes=out_channels, SE_mode=True)
 
     print("Loading model {}".format(args.model))
     # original saved file with DataParallel

@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from torch import optim
 
 from eval import *
-from unet import UNet
+from unet import *
 
 from dataset import ElaticSet
 import unet
@@ -106,7 +106,7 @@ def train_net(net,
         num_i = 0
 
         # Sets the learning rate to the initial LR decayed by 10 every 10 epochs when epoch < 70
-        if (epoch + 1) % 20 == 0 and epoch < 100:
+        if (epoch + 1) % 10 == 0 and epoch < 50:
             for param_group in optimizer.param_groups:
                 param_group['lr'] = param_group['lr'] * 0.1
                 print('learn rate is ' + str(param_group['lr'] * 0.1))
@@ -183,7 +183,7 @@ def get_args():
 if __name__ == '__main__':
     args = get_args()
 
-    net = UNet(n_channels=1, n_classes=2)
+    net = DeeperUNet(n_channels=1, n_classes=2,SE_mode=True)
 
     if args.load:
         net.load_state_dict(torch.load(args.load))
